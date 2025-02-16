@@ -1,0 +1,66 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: MSBuild
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+env:
+  # Path to the solution file relative to the root of the project.
+  VCPRJ_DIR: BuildVS2010
+  VCPRJ_FNAME: udis86.sln
+  VCPRJ_BUILD: build.proj
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install MSVC 2015 (v140) and Windows 8.1 SDK
+      shell: powershell
+      run: |
+        $VS_BTOOLS_EXE="bldtl140.exe" # gaggy 8.3
+        $VS_BTOOLS_URI="https://aka.ms/vs/15/release/vs_buildtools.exe"
+        Invoke-WebRequest -Uri $VS_BTOOLS_URI -OutFile $VS_BTOOLS_EXE
+        Start-Process -FilePath $VS_BTOOLS_EXE -ArgumentList `
+        "--add", "Microsoft.VisualStudio.Component.VC.140", `
+        "--add", "Microsoft.VisualStudio.Component.Windows81SDK", `
+        "--quiet", "--norestart", "--force", "--wait" -Wait -PassThru
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+      with:
+        vs-version: '[14.0,15.0)'
+      
+    #- name: Restore NuGet packages
+      #working-directory: ${{env.GITHUB_WORKSPACE}}
+      #run: nuget restore ${{env.SOLUTION_FILE_PATH}}
+
+    #- name: Build
+      #working-directory: ${{env.GITHUB_WORKSPACE}}
+      ## Add additional options to the MSBuild command line here (like platform or verbosity level).
+      ## See https://docs.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference
+      #run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}}
+    - name: Build with Batch
+      shell: cmd
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: |
+        cd ${{VCPRJ_DIR}}
+        call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" x86_amd64
+        msbuild.exe ${{VCPRJ_FNAME}} /t:Clean
+        msbuild.exe ${{VCPRJ_BUILD}} /t:Clean,BuildDebug_x86,BuildDebug_x64,BuildRelease_x86,BuildRelease_x64,PostBuild
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4.6.0
+      with:
+        path: ${{env.GITHUB_WORKSPACE}}\\${{VCPRJ_DIR}}\\build
